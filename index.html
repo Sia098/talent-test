@@ -102,7 +102,7 @@
     </div>
 
     <div class="result-actions">
-      <button class="btn-act save" id="saveBtn"><b>🖼️ 保存结果</b><span>生成结果长图，存到相册/电脑</span></button>
+      <button class="btn-act save" id="saveBtn"><b>🖼️ 保存结果</b><span>生成结果长图并保存到相册</span></button>
       <button class="btn-act social" id="copyBtn"><b>📤 分享给朋友</b><span>复制结果链接</span></button>
       <button class="btn-act ghost" id="retakeBtn"><b>↻ 再测一次</b><span>用同一密码重新测</span></button>
     </div>
@@ -112,12 +112,12 @@
 
 <div id="toast"></div>
 
-<!-- ===== 结果长图弹窗 ===== -->
+<!-- ===== 结果长图（微信等无法直接保存时的看图长按兜底）===== -->
 <div class="modal" id="img-modal">
   <div class="box imgbox">
     <button class="modal-x" id="imgClose">×</button>
-    <h3>保存 / 分享结果</h3>
-    <p class="m-lead">长按下方图片即可保存到相册；也可点按钮直接下载。</p>
+    <h3>保存到相册</h3>
+    <p class="m-lead">长按下方图片 → 选择「保存图片 / 存储图像」即可存到相册。</p>
     <div class="imgwrap"><img id="img-result" src="" alt="天赋测试结果长图"></div>
     <button class="btn-primary" id="imgDownload">⬇ 下载图片</button>
   </div>
