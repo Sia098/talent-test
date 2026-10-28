@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>天赋能力测试 · 你天生擅长什么</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- ===== 首页：密码门 ===== -->
+  <section class="screen active" id="screen-home">
+    <div class="home">
+      <div class="hero">
+        <div class="badge">🔥 30 次真实取舍，看清你的天赋</div>
+        <h1>天赋能力测试<br>你天生擅长什么</h1>
+        <p class="lead">30 个贴近真实生活的情境题，参考加德纳多元智能理论，<br>看懂你的天赋分布、性格底色与盲区。</p>
+      </div>
+      <div class="pwcard">
+        <label for="pw">请输入测试密码</label>
+        <input id="pw" type="password" inputmode="text" autocomplete="off" placeholder="密码区分大小写">
+        <button id="startBtn" class="btn-primary">开始测试 →</button>
+        <div id="pwError" class="pw-error"></div>
+        <p class="pw-tip">每个密码可测试 3 次，用完即止。</p>
+      </div>
+      <p class="privacy">🔒 全程本地计算，不作任何采集 · 参考多元智能理论，仅供自我探索，非诊断工具</p>
+    </div>
+  </section>
+
+  <!-- ===== 答题页 ===== -->
+  <section class="screen" id="screen-quiz">
+    <div class="qhead"><span class="p" id="qcount">第 1 / 30 题</span><span class="p">选最像你的，没有标准答案</span></div>
+    <div class="progress"><i id="bar"></i></div>
+    <div class="qcard">
+      <div class="qnum" id="qnum">QUESTION 01</div>
+      <div class="qtitle" id="qtitle"></div>
+      <div class="qhint" id="qhint">选项都说得通，选那个更接近你本能的</div>
+      <div id="qopts"></div>
+    </div>
+    <div class="qnav">
+      <button class="btn-prev" id="prevBtn">← 上一题</button>
+      <button class="btn-next" id="nextBtn">下一题</button>
+    </div>
+  </section>
+
+  <!-- ===== 结果页 ===== -->
+  <section class="screen" id="screen-result">
+    <div id="capture">
+      <div class="reshero">
+        <div class="emoji" id="r-emoji">✨</div>
+        <div class="typ">YOUR TALENT TYPE</div>
+        <h2 id="r-name">—</h2>
+        <div class="tag" id="r-tag">—</div>
+        <div class="desc" id="r-desc"></div>
+        <div class="combo" id="r-combo"></div>
+      </div>
+
+      <div class="card">
+        <h3>🪞 你的性格底色<span>为什么你会这样做</span></h3>
+        <div id="r-persona"></div>
+      </div>
+
+      <div class="card radarwrap">
+        <h3>🗺️ 你的十大天赋雷达</h3>
+        <div id="radar"></div>
+        <div class="dimread" id="r-dimread"></div>
+      </div>
+
+      <div class="card">
+        <h3>🔍 这份天赋，在生活里长这样</h3>
+        <ol class="detaillist" id="r-detail"></ol>
+      </div>
+
+      <div class="card">
+        <h3>🧬 主天赋 × 副天赋，叠加出什么<span>你最独特的那个部分</span></h3>
+        <p class="stacktxt" id="r-stack"></p>
+      </div>
+
+      <div class="card">
+        <h3>⚠️ 你的盲区，以及怎么补<span>写实一点，才用得上</span></h3>
+        <div id="r-blind"></div>
+      </div>
+
+      <div class="card theory">
+        <h3>📖 这套天赋的理论依据</h3>
+        <h4 id="th-title">—</h4>
+        <p id="th-theory"></p>
+        <div class="factbox" id="th-fact"></div>
+      </div>
+
+      <div class="card">
+        <h3>💼 你适合的职业</h3>
+        <div class="chips" id="d-chips"></div>
+        <p style="font-size:11.5px;color:#98a0b3;margin-top:11px;line-height:1.7">不是「只能做这些」，而是这些位置更少消耗你的天赋。</p>
+      </div>
+
+      <div class="card">
+        <h3>🕳️ 什么环境会浪费你的天赋</h3>
+        <p class="wastetxt" id="r-waste"></p>
+      </div>
+    </div>
+
+    <div class="result-actions">
+      <button class="btn-act save" id="saveBtn"><b>🖼️ 保存结果</b><span>生成结果长图，存到相册/电脑</span></button>
+      <button class="btn-act social" id="copyBtn"><b>📤 分享给朋友</b><span>复制结果链接</span></button>
+      <button class="btn-act ghost" id="retakeBtn"><b>↻ 再测一次</b><span>用同一密码重新测</span></button>
+    </div>
+  </section>
+
+</div>
+
+<div id="toast"></div>
+
+<!-- ===== 结果长图弹窗 ===== -->
+<div class="modal" id="img-modal">
+  <div class="box imgbox">
+    <button class="modal-x" id="imgClose">×</button>
+    <h3>保存 / 分享结果</h3>
+    <p class="m-lead">长按下方图片即可保存到相册；也可点按钮直接下载。</p>
+    <div class="imgwrap"><img id="img-result" src="" alt="天赋测试结果长图"></div>
+    <button class="btn-primary" id="imgDownload">⬇ 下载图片</button>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="vendor/html2canvas.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
