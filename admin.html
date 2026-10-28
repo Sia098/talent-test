@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>密码管理 · 天赋测试</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .admin-hero{text-align:center;margin:8px 0 18px}
+  .admin-hero h1{font-size:22px;font-weight:900;margin:0 0 6px}
+  .admin-hero p{font-size:13px;color:var(--sub);margin:0}
+  .login-hint{color:#e0483a;font-size:13px;min-height:18px;margin-top:10px;text-align:center;font-weight:600}
+  .add-row{display:flex;gap:8px;margin-top:6px;align-items:center}
+  .add-row input{flex:1;border:1.5px solid var(--line);background:#fafbff;border-radius:12px;padding:11px;font-size:14px;outline:none}
+  .add-row input:focus{border-color:var(--main);background:#f3f1ff}
+  .add-row .btn-primary{width:auto;margin-top:0;padding:11px 18px;font-size:14px;flex:0 0 auto}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px}
+  th,td{padding:9px 6px;border-bottom:1px solid #eef0f6;text-align:left;vertical-align:middle}
+  th{color:var(--sub);font-weight:700;font-size:12px}
+  td b{font-size:14px}
+  .rem-0{color:#e5484d;font-weight:800}
+  .rem-ok{color:#2f8f6f;font-weight:700}
+  .btn-reset{border:none;background:#efeaff;color:var(--main);font-size:12px;font-weight:700;padding:6px 12px;border-radius:9px;cursor:pointer}
+  .btn-reset:active{transform:scale(.96)}
+  .summary{font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:600}
+  .summary b{color:var(--main)}
+  .panel-sec{margin-top:16px}
+  .sec-h{font-size:14px;font-weight:800;margin:0 0 10px}
+  .link-home{display:block;text-align:center;margin-top:22px;font-size:12.5px;color:var(--main);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="admin-hero">
+    <h1>🔐 密码管理后台</h1>
+    <p>查询剩余次数 · 一键重置 · 新增密码</p>
+  </div>
+
+  <!-- 登录 -->
+  <div class="card" id="loginCard">
+    <label style="display:block;font-size:13px;color:var(--sub);margin-bottom:10px;font-weight:600">管理员密码</label>
+    <div class="add-row">
+      <input type="password" id="adminPw" placeholder="输入管理员密码" autocomplete="off">
+      <button class="btn-primary" id="loginBtn">进入</button>
+    </div>
+    <div class="login-hint" id="loginHint"></div>
+  </div>
+
+  <!-- 面板（登录后显示） -->
+  <div id="panel" style="display:none">
+
+    <div class="card panel-sec">
+      <div class="summary" id="summary"></div>
+      <button class="btn-primary" id="resetAllBtn">一键重置全部（清零所有已用次数）</button>
+    </div>
+
+    <div class="card panel-sec">
+      <div class="sec-h">➕ 新增密码</div>
+      <div class="add-row">
+        <input id="newCode" placeholder="密码内容（如 1234 或 abcd）" autocomplete="off">
+        <input id="newMax" type="number" value="3" min="1" max="999" style="max-width:74px" title="次数上限">
+        <button class="btn-primary" id="addBtn">添加</button>
+      </div>
+    </div>
+
+    <div class="card panel-sec">
+      <div class="sec-h">📋 全部密码</div>
+      <table>
+        <thead>
+          <tr><th>密码</th><th>已用</th><th>上限</th><th>剩余</th><th>操作</th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+
+    <a class="link-home" href="index.html">← 返回测评首页</a>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+  const $ = id => document.getElementById(id);
+
+  function headers() {
+    return {
+      'Content-Type': 'application/json',
+      'apikey': window.SUPABASE_ANON,
+      'Authorization': 'Bearer ' + window.SUPABASE_ANON
+    };
+  }
+  function rpc(name, body) {
+    return fetch(window.SUPABASE_URL + '/rest/v1/rpc/' + name, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(body)
+    }).then(r => r.json());
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function toast(msg) {
+    let t = $('toast');
+    if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(t._timer); t._timer = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  function adminPw() { return $('adminPw').value.trim(); }
+
+  function render(rows) {
+    const tb = $('rows'); tb.innerHTML = '';
+    let totalRemain = 0, totalMax = 0;
+    rows.forEach(r => {
+      totalRemain += r.remaining; totalMax += r.max_uses;
+      const remCls = r.remaining === 0 ? 'rem-0' : 'rem-ok';
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td><b>' + escapeHtml(r.code) + '</b></td>' +
+        '<td>' + r.used + '</td>' +
+        '<td>' + r.max_uses + '</td>' +
+        '<td class="' + remCls + '">' + r.remaining + '</td>' +
+        '<td><button class="btn-reset" data-code="' + escapeHtml(r.code) + '">重置</button></td>';
+      tb.appendChild(tr);
+    });
+    $('summary').innerHTML = '共 <b>' + rows.length + '</b> 个密码 · 总剩余 <b>' + totalRemain + '</b> / ' + totalMax + ' 次';
+    tb.querySelectorAll('.btn-reset').forEach(b => {
+      b.onclick = () => resetOne(b.dataset.code);
+    });
+  }
+
+  function refresh() {
+    return rpc('admin_list', { p_admin: adminPw() }).then(d => {
+      if (d && d.ok) render(d.rows);
+      else toast('会话失效，请重新进入');
+    });
+  }
+
+  function login() {
+    const pw = adminPw();
+    if (!pw) { $('loginHint').textContent = '请输入管理员密码'; return; }
+    $('loginHint').textContent = '校验中…';
+    rpc('admin_list', { p_admin: pw }).then(d => {
+      if (d && d.ok) {
+        $('loginHint').textContent = '';
+        $('loginCard').style.display = 'none';
+        $('panel').style.display = 'block';
+        render(d.rows);
+      } else {
+        $('loginHint').textContent = '管理员密码错误';
+      }
+    }).catch(() => { $('loginHint').textContent = '网络异常，请刷新重试'; });
+  }
+
+  function resetOne(code) {
+    rpc('admin_reset_one', { p_admin: adminPw(), p_code: code }).then(d => {
+      if (d && d.ok) { toast('已重置：' + code); refresh(); }
+      else toast('重置失败');
+    });
+  }
+
+  $('loginBtn').onclick = login;
+  $('adminPw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+  $('resetAllBtn').onclick = () => {
+    if (!confirm('确定把全部密码的「已用次数」清零吗？\n（不会影响密码本身，只是把剩余次数恢复为上限）')) return;
+    rpc('admin_reset_all', { p_admin: adminPw() }).then(d => {
+      if (d && d.ok) { toast('已全部重置'); refresh(); }
+      else toast('操作失败');
+    });
+  };
+
+  $('addBtn').onclick = () => {
+    const code = $('newCode').value.trim();
+    const max = parseInt($('newMax').value, 10) || 3;
+    if (!code) { toast('请输入密码内容'); return; }
+    rpc('admin_add', { p_admin: adminPw(), p_code: code, p_max: max }).then(d => {
+      if (d && d.ok) { toast('已添加：' + code); $('newCode').value = ''; refresh(); }
+      else toast('添加失败（可能已存在）');
+    });
+  };
+</script>
+</body>
+</html>
