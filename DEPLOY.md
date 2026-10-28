@@ -85,6 +85,27 @@ window.SUPABASE_ANON = 'eyJhbGci...';   // 已填入真实 anon key
 
 ---
 
+## 六、密码管理后台（admin.html）🔐
+
+`admin.html` 是一个独立的后台页面，**地址**：`https://<你的用户名>.github.io/<仓库名>/admin.html`
+
+功能：输入管理员密码后，可 **查看所有密码的剩余次数**、**一键重置全部（清零 used）**、**重置单个**、**新增密码**。
+
+> 安全设计：管理员密码以 bcrypt 哈希存于 Supabase 的 `admin_config` 表；
+> 前端只用 `anon` key，拿不到密码表、也拿不到明文。所有后台操作都经过带密码校验的 RPC。
+
+**上线这一页需要两步（均已准备好，待授权执行）：**
+
+1. 在 Supabase **SQL Editor** 运行本仓库的 `supabase/admin.sql`
+   （建 `admin_config` 表 + 4 个受保护函数：`admin_list` / `admin_reset_one` / `admin_reset_all` / `admin_add`）。
+2. 把本仓库的 `admin.html` 推送到 GitHub（已包含在部署目录，随下次 push 上线）。
+
+**管理员密码**：部署时已用随机强密码初始化（随机值见交付说明，不在任何仓库文件中明文保存）。
+如需改成你自己的，在 Supabase SQL Editor 执行（把 `你的新密码` 换掉即可，哈希自动重算）：
+`update public.admin_config set pw_hash = crypt('你的新密码', gen_salt('bf')) where id = 1;`
+
+---
+
 ## 备注
 
 - **本地测试**：`config.js` 还是占位符时，前端会自动回退到同源的 `node server.js`
