@@ -206,6 +206,9 @@ function renderResult(answers) {
   setShareURL(answers);
 
   show('screen-result');
+
+  // 后台预生成长图，点「保存结果」时可直接保存/分享（无需等待）
+  setTimeout(prepareResultImage, 400);
 }
 
 function setShareURL(answers) {
@@ -221,30 +224,75 @@ $('saveBtn').addEventListener('click', saveImage);
 $('copyBtn').addEventListener('click', copyLink);
 $('retakeBtn').addEventListener('click', retake);
 
-/* 结果长图弹窗 */
-$('imgClose').addEventListener('click', () => $('img-modal').classList.remove('show'));
-$('imgDownload').addEventListener('click', () => { if (currentImgURL) downloadURL(currentImgURL); });
+/* 结果长图：渲染后预生成；普通浏览器直接保存/分享，微信等环境看图长按兜底 */
+let resultBlob = null;      // 预生成的 PNG
+let preparing = null;       // 进行中的生成 Promise
+let modalImgURL = '';       // 兜底看图的 objectURL
 
-let currentImgURL = '';
+$('imgClose').addEventListener('click', () => { $('img-modal').classList.remove('show'); });
+$('imgDownload').addEventListener('click', () => { if (resultBlob) downloadBlob(resultBlob); });
 
-function saveImage() {
-  const el = $('capture');
-  toast('正在生成结果长图…');
-  if (typeof html2canvas !== 'function') { toast('生图组件未加载，请刷新'); return; }
-  html2canvas(el, { scale: 2, backgroundColor: '#f4f5fb', useCORS: true, logging: false })
-    .then(canvas => {
-      const url = canvas.toDataURL('image/png');
-      currentImgURL = url;
-      $('img-result').src = url;
-      $('img-modal').classList.add('show');
-    })
-    .catch(() => toast('生成失败，请重试'));
+function isMobileUA() {
+  return navigator.maxTouchPoints > 0 || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+function isWeChat() {
+  return /MicroMessenger/i.test(navigator.userAgent);
 }
 
-function downloadURL(url) {
+function generateBlob() {
+  if (typeof html2canvas !== 'function') return Promise.reject(new Error('no html2canvas'));
+  return html2canvas($('capture'), { scale: 2, backgroundColor: '#f4f5fb', useCORS: true, logging: false })
+    .then(canvas => new Promise(resolve => {
+      if (canvas.toBlob) canvas.toBlob(b => resolve(b), 'image/png');
+      else resolve(null);
+    }));
+}
+
+function prepareResultImage() {
+  resultBlob = null;
+  preparing = generateBlob().then(b => { resultBlob = b; return b; }).catch(() => null);
+}
+
+function downloadBlob(blob) {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = '我的天赋测试结果.png';
   document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 6000);
+  toast('已保存，请到相册/下载查看');
+}
+
+// 兜底：显示长图，用户长按保存（微信 / 旧版 iOS 等不支持分享下载的环境）
+function showImageFallback(blob) {
+  if (modalImgURL) URL.revokeObjectURL(modalImgURL);
+  modalImgURL = URL.createObjectURL(blob);
+  $('img-result').src = modalImgURL;
+  $('img-modal').classList.add('show');
+}
+
+function saveImage() {
+  const proceed = blob => {
+    if (!blob) { toast('生成失败，请重试'); return; }
+    resultBlob = blob;
+    // 微信内置浏览器：无法分享/下载，直接看图长按
+    if (isWeChat()) { showImageFallback(blob); return; }
+    const file = new File([blob], '我的天赋测试结果.png', { type: 'image/png' });
+    // 移动端优先系统分享（iOS「存储图像」/ 安卓「保存到相册」）
+    if (isMobileUA() && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: '我的天赋测试结果' }).catch(err => {
+        if (err && err.name === 'AbortError') return;  // 用户取消
+        showImageFallback(blob);                       // 分享失败 → 看图长按
+      });
+    } else if (isMobileUA()) {
+      showImageFallback(blob);                         // 移动端不支持分享 → 看图长按
+    } else {
+      downloadBlob(blob);                              // 桌面端直接下载
+    }
+  };
+  if (resultBlob) { proceed(resultBlob); return; }
+  if (!preparing) preparing = generateBlob().catch(() => null);
+  toast('正在生成结果长图…');
+  preparing.then(proceed);
 }
 
 function copyLink() {
