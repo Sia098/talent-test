@@ -4,6 +4,7 @@ const ans = new Array(Q.length).fill(null);
 let verified = false;       // 本次会话是否已通过密码校验
 let sharedMode = false;     // 是否为他人分享链接打开（免密查看）
 let autoTimer = null;
+let hoverTimer = null;      // 跳题后短暂抑制 hover 高亮，避免"上一题的紫色残留"观感
 
 const $ = (id) => document.getElementById(id);
 
@@ -90,6 +91,10 @@ function renderQ() {
   $('qtitle').textContent = Q[idx].q;
   const box = $('qopts');
   box.innerHTML = '';
+  // 换题瞬间关掉 hover 高亮，防止鼠标残留位置把新选项"点亮"
+  box.classList.add('nohover');
+  if (hoverTimer) clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(() => box.classList.remove('nohover'), 450);
   const keys = ['A', 'B', 'C', 'D', 'E'];
   Q[idx].o.forEach((txt, i) => {
     const b = document.createElement('button');
