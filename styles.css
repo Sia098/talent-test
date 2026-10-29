@@ -39,7 +39,12 @@ body{
 .qtitle{font-size:18px;font-weight:800;margin:8px 0 6px;line-height:1.5}
 .qhint{font-size:12px;color:#98a0b3;margin-bottom:16px}
 .qcard .opt{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:1.5px solid var(--line);background:#fafbff;border-radius:14px;padding:15px;margin-bottom:11px;cursor:pointer;font-size:14.5px;color:var(--ink);transition:.18s;line-height:1.5}
-.qcard .opt:hover{border-color:var(--main);background:#f3f1ff}
+/* 悬停高亮只在真正有鼠标的设备上生效；触屏点按后不再残留高亮 */
+@media (hover:hover) and (pointer:fine){
+  .qcard .opt:hover{border-color:var(--main);background:#f3f1ff}
+  /* 刚跳转到新题时的短暂抑制：避免鼠标停在同一位置，让新选项被误高亮 */
+  #qopts.nohover .opt:hover{border-color:var(--line);background:#fafbff}
+}
 .qcard .opt.sel{border-color:var(--main);background:#efeaff;font-weight:600}
 .qcard .opt .k{width:24px;height:24px;flex:0 0 24px;border-radius:50%;background:#eee;color:#888;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
 .qcard .opt.sel .k{background:var(--main);color:#fff}
