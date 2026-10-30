@@ -196,41 +196,68 @@ function isWeChat() {
   return /MicroMessenger/i.test(navigator.userAgent);
 }
 
+// 把内联 SVG 转成 dataURL（html2canvas 在 Safari 下不渲染内联 SVG）
+function svgToDataURL(svgEl) {
+  try {
+    const xml = new XMLSerializer().serializeToString(svgEl);
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+  } catch (e) { return null; }
+}
+
+// 截图前，把 #radar 里的内联 SVG 同步替换成已加载完成的 <img>（等待加载+超时兜底，防卡死）
+function replaceRadarSvgWithImage() {
+  const svgEl = $('capture').querySelector('#radar svg');
+  if (!svgEl || svgEl.dataset.replaced) return Promise.resolve();
+  const url = svgToDataURL(svgEl);
+  if (!url) return Promise.resolve();
+  return Promise.race([
+    new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const r = svgEl.getBoundingClientRect();
+        img.style.width = (r.width || 300) + 'px';
+        img.style.height = (r.height || 300) + 'px';
+        img.style.display = 'block';
+        img.style.margin = '0 auto';
+        svgEl.replaceWith(img);
+        img.dataset.replaced = '1';
+        resolve();
+      };
+      img.onerror = () => resolve();
+      img.src = url;
+    }),
+    new Promise(resolve => setTimeout(resolve, 1500))   // 1.5s 超时兜底，绝不卡死
+  ]);
+}
+
+function html2canvasToBlob(canvas) {
+  return new Promise(resolve => {
+    if (canvas.toBlob) {
+      canvas.toBlob(b => resolve(b), 'image/png');
+    } else {
+      try {
+        const d = canvas.toDataURL('image/png');
+        if (d && d.indexOf('data:image') === 0) {
+          fetch(d).then(r => r.blob()).then(resolve).catch(() => resolve(null));
+        } else resolve(null);
+      } catch (e) { resolve(null); }
+    }
+  });
+}
+
 function generateBlob() {
-  if (typeof html2canvas !== 'function') return Promise.reject(new Error('no html2canvas'));
+  if (typeof html2canvas !== 'function') return Promise.resolve(null);
   const node = $('capture');
   const w = node.offsetWidth || window.innerWidth;
-  // 记录雷达 SVG 的实际渲染尺寸（html2canvas 1.4.1 不渲染内联 SVG，需转为图片）
-  const svgEl = node.querySelector('svg');
-  let svgW = 300, svgH = 300;
-  if (svgEl) { const r = svgEl.getBoundingClientRect(); svgW = Math.round(r.width) || 300; svgH = Math.round(r.height) || 300; }
-  return html2canvas(node, {
-    scale: Math.max(2, window.devicePixelRatio || 1),
-    backgroundColor: '#f4f5fb',
-    useCORS: true,
-    logging: false,
-    windowWidth: w,
-    onclone: (cloned) => {
-      const s = cloned.querySelector('#capture svg');
-      if (s) {
-        try {
-          const xml = new XMLSerializer().serializeToString(s);
-          const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
-          const img = cloned.createElement('img');
-          img.src = url;
-          img.style.width = svgW + 'px';
-          img.style.height = svgH + 'px';
-          img.style.display = 'block';
-          img.style.margin = '0 auto';
-          s.replaceWith(img);
-        } catch (e) { /* 忽略，退化为空白 */ }
-      }
-    }
-  })
-    .then(canvas => new Promise(resolve => {
-      if (canvas.toBlob) canvas.toBlob(b => resolve(b), 'image/png');
-      else resolve(null);
-    }));
+  return replaceRadarSvgWithImage().then(() => {
+    return html2canvas(node, {
+      scale: Math.max(2, window.devicePixelRatio || 1),
+      backgroundColor: '#f4f5fb',
+      useCORS: true,
+      logging: false,
+      windowWidth: w
+    });
+  }).then(canvas => html2canvasToBlob(canvas)).catch(() => null);
 }
 
 function prepareResultImage() {
@@ -247,24 +274,25 @@ function downloadBlob(blob) {
   toast('已保存，请到相册/下载查看');
 }
 
-// 展示长图：点"保存结果"后一定先呈现长图，保存方式在弹窗内选择
-function showResultImage(blob) {
+// 把长图放进弹窗并显示
+function showLongImage(blob) {
   if (modalImgURL) URL.revokeObjectURL(modalImgURL);
   modalImgURL = URL.createObjectURL(blob);
   $('img-result').src = modalImgURL;
   $('img-modal').classList.add('show');
 }
 
+// 点"保存结果"：先立即弹出长图预览（保证一定能看到），再异步填充截图
 function saveImage() {
-  const done = blob => {
-    if (!blob) { toast('生成长图失败，请重试'); return; }
-    resultBlob = blob;
-    showResultImage(blob);   // 先呈现长图，保证用户看到"长图样式"
+  $('img-modal').classList.add('show');      // 立即弹窗，绝不因截图失败而不出现
+  const fill = blob => {
+    if (blob) { resultBlob = blob; showLongImage(blob); }
+    else toast('生成长图失败，请稍后重试');
   };
-  if (resultBlob) { done(resultBlob); return; }
-  if (!preparing) preparing = generateBlob().catch(() => null);
+  if (resultBlob) { fill(resultBlob); return; }
+  if (!preparing) preparing = generateBlob().then(b => { resultBlob = b; return b; }).catch(() => null);
   toast('正在生成结果长图…');
-  preparing.then(done);
+  preparing.then(fill);
 }
 
 // 弹窗内"保存到相册"：移动端走系统分享（可一键存图），否则回退下载
