@@ -1,7 +1,8 @@
 /* ===================== 状态 ===================== */
 let idx = 0;
 const ans = new Array(Q.length).fill(null);
-// 免费开放：无需密码校验，直接进入测试
+let globalToken = null;                       // 当前有效访问 token（无则未授权，不可答题）
+const RESULT_TTL = 7 * 24 * 60 * 60 * 1000;   // 结果本地保留 7 天（重进链接直接展示）
 let autoTimer = null;
 let hoverTimer = null;      // 跳题后短暂抑制 hover 高亮，避免"上一题的紫色残留"观感
 
@@ -157,6 +158,8 @@ function renderResult(answers) {
 
   // 把结果写入可分享链接（?r= 编码答案）
   setShareURL(answers);
+  // 授权访问（带有效 token）时，把结果缓存到本地，7 天内重进链接直接展示
+  if (globalToken) saveLocalResult(globalToken, answers);
 
   show('screen-result');
 
@@ -264,7 +267,7 @@ function fallbackCopy(text) {
 }
 
 function retake() {
-  // 免费开放：直接重新测试，无需再次校验
+  if (globalToken) clearLocalResult(globalToken);  // 清掉旧结果，重新测
   ans.fill(null); idx = 0; renderQ(); show('screen-quiz');
 }
 
@@ -281,6 +284,67 @@ function loadShared() {
 }
 
 /* ===================== 启动 ===================== */
-if (!loadShared()) {
-  show('screen-home');
+(function boot() {
+  // 分享链接优先：?r= 编码答案，免密直接看结果（不消耗 token 授权）
+  if (loadShared()) return;
+
+  // 否则必须带有效 token 访问链接
+  const m = location.search.match(/[?&]t=([^&]+)/);
+  if (!m) { showInvalid('请通过有效的测试链接打开本页面'); return; }
+  verifyLink(decodeURIComponent(m[1]));
+})();
+
+function supaHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'apikey': window.SUPABASE_ANON,
+    'Authorization': 'Bearer ' + window.SUPABASE_ANON
+  };
+}
+
+// 链接无效 / 过期 / 作废 时展示的提示页
+function showInvalid(msg) {
+  const el = $('invalid-msg');
+  if (el) el.textContent = msg || '该测试链接无效，请联系卖家获取';
+  show('screen-invalid');
+}
+
+// 校验访问链接（存在 / 未作废 / 未过期）
+function verifyLink(token) {
+  fetch(window.SUPABASE_URL + '/rest/v1/rpc/verify_link', {
+    method: 'POST',
+    headers: supaHeaders(),
+    body: JSON.stringify({ p_token: token })
+  }).then(r => r.json()).then(d => {
+    if (d && d.ok) {
+      globalToken = token;
+      const saved = loadLocalResult(token);
+      if (saved) { renderResult(saved); return; }   // 7 天内有结果 → 直接展示，跳过答题
+      show('screen-home');
+    } else {
+      const msg = d && d.reason === 'expired' ? '该测试链接已过期，请联系卖家获取新链接'
+                 : d && d.reason === 'revoked' ? '该测试链接已被卖家作废，请联系卖家获取新链接'
+                 : '该测试链接无效，请联系卖家获取';
+      showInvalid(msg);
+    }
+  }).catch(() => showInvalid('网络异常，请刷新页面重试'));
+}
+
+/* ---- 本地结果缓存（按 token 关联，7 天有效）---- */
+function resultKey(token) { return 'tt_res_' + token; }
+function saveLocalResult(token, answers) {
+  try { localStorage.setItem(resultKey(token), JSON.stringify({ a: answers, ts: Date.now() })); } catch (e) {}
+}
+function loadLocalResult(token) {
+  try {
+    const raw = localStorage.getItem(resultKey(token));
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    if (!o || !Array.isArray(o.a) || o.a.length !== Q.length) return null;
+    if (Date.now() - o.ts > RESULT_TTL) { localStorage.removeItem(resultKey(token)); return null; }
+    return o.a;
+  } catch (e) { return null; }
+}
+function clearLocalResult(token) {
+  try { localStorage.removeItem(resultKey(token)); } catch (e) {}
 }
