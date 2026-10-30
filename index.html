@@ -113,7 +113,7 @@
     <div class="result-actions">
       <button class="btn-act save" id="saveBtn"><b>🖼️ 保存结果</b><span>生成结果长图并保存到相册</span></button>
       <button class="btn-act social" id="copyBtn"><b>📤 分享给朋友</b><span>复制结果链接</span></button>
-      <button class="btn-act ghost" id="retakeBtn"><b>↻ 再测一次</b><span>用同一密码重新测</span></button>
+      <button class="btn-act ghost" id="retakeBtn"><b>↻ 再测一次</b><span>结果有效期 7 天</span></button>
     </div>
   </section>
 
@@ -121,14 +121,15 @@
 
 <div id="toast"></div>
 
-<!-- ===== 结果长图（微信等无法直接保存时的看图长按兜底）===== -->
+<!-- ===== 结果长图（点"保存结果"后展示长图，提供多种保存方式）===== -->
 <div class="modal" id="img-modal">
   <div class="box imgbox">
     <button class="modal-x" id="imgClose">×</button>
-    <h3>保存到相册</h3>
-    <p class="m-lead">长按下方图片 → 选择「保存图片 / 存储图像」即可存到相册。</p>
+    <h3>保存你的天赋长图</h3>
+    <p class="m-lead">下面就是完整结果长图。手机点「保存到相册」或<b>长按图片</b>选「存储图像」即可存到相册；电脑点「下载图片」。</p>
     <div class="imgwrap"><img id="img-result" src="" alt="天赋测试结果长图"></div>
-    <button class="btn-primary" id="imgDownload">⬇ 下载图片</button>
+    <button class="btn-primary" id="imgSave">📥 保存到相册</button>
+    <button class="btn-ghost" id="imgDownload">⬇ 下载图片</button>
   </div>
 </div>
 
