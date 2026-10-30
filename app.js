@@ -1,8 +1,7 @@
 /* ===================== 状态 ===================== */
 let idx = 0;
 const ans = new Array(Q.length).fill(null);
-let verified = false;       // 本次会话是否已通过密码校验
-let sharedMode = false;     // 是否为他人分享链接打开（免密查看）
+// 免费开放：无需密码校验，直接进入测试
 let autoTimer = null;
 let hoverTimer = null;      // 跳题后短暂抑制 hover 高亮，避免"上一题的紫色残留"观感
 
@@ -22,65 +21,14 @@ function toast(msg) {
   toast._t = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-/* ===================== 首页：密码门 ===================== */
-$('startBtn').addEventListener('click', verifyPassword);
-$('pw').addEventListener('keydown', e => { if (e.key === 'Enter') verifyPassword(); });
+/* ===================== 首页：落地页（免费开放，无需密码） ===================== */
+$('startBtn').addEventListener('click', startTest);
 
-function verifyPassword() {
-  const pw = $('pw').value.trim();
-  const err = $('pwError');
-  if (!pw) { err.textContent = '请输入测试密码'; return; }
-  err.textContent = '校验中…';
-
-  // 已配置 Supabase → 走云端；未配置（本地开发占位符）→ 回退到本地 node server 的 /api/verify
-  const useSupabase = window.SUPABASE_URL && window.SUPABASE_URL.indexOf('YOUR-PROJECT-REF') === -1;
-  if (useSupabase) verifyViaSupabase(pw, err);
-  else verifyLocal(pw, err);
-}
-
-// 统一的「结果 → 页面」处理
-function applyResult(d, err) {
-  if (d && d.ok) {
-    verified = true;
-    sharedMode = false;
-    ans.fill(null);
-    idx = 0;
-    renderQ();
-    show('screen-quiz');
-  } else if (d && d.reason === 'invalid') {
-    err.textContent = '密码不正确，请检查后重试';
-  } else if (d && d.reason === 'exhausted') {
-    err.textContent = '该密码的测试次数已用完（共 ' + (d.max || 3) + ' 次）';
-  } else {
-    err.textContent = '校验失败，请稍后重试';
-  }
-}
-
-function verifyViaSupabase(pw, err) {
-  fetch(window.SUPABASE_URL + '/rest/v1/rpc/verify_password', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': window.SUPABASE_ANON,
-      'Authorization': 'Bearer ' + window.SUPABASE_ANON
-    },
-    body: JSON.stringify({ p_code: pw })
-  })
-    .then(r => r.json())
-    .then(d => applyResult(d, err))
-    .catch(() => { err.textContent = '网络异常，请刷新页面重试'; });
-}
-
-// 本地开发回退：调用同源 /api/verify（需本地 node server.js）
-function verifyLocal(pw, err) {
-  fetch('/api/verify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password: pw })
-  })
-    .then(r => r.json())
-    .then(d => applyResult(d, err))
-    .catch(() => { err.textContent = '网络异常，请刷新页面重试'; });
+function startTest() {
+  ans.fill(null);
+  idx = 0;
+  renderQ();
+  show('screen-quiz');
 }
 
 /* ===================== 答题 ===================== */
@@ -316,14 +264,8 @@ function fallbackCopy(text) {
 }
 
 function retake() {
-  if (verified) {
-    // 同一密码会话内，免重新校验直接重测（不额外消耗次数）
-    ans.fill(null); idx = 0; renderQ(); show('screen-quiz');
-  } else {
-    // 分享链接打开 / 未校验：回到密码门
-    $('pw').value = ''; $('pwError').textContent = '';
-    show('screen-home');
-  }
+  // 免费开放：直接重新测试，无需再次校验
+  ans.fill(null); idx = 0; renderQ(); show('screen-quiz');
 }
 
 /* ===================== 分享链接打开（免密查看） ===================== */
@@ -333,8 +275,6 @@ function loadShared() {
   try {
     const answers = JSON.parse(atob(decodeURIComponent(m[1])));
     if (!Array.isArray(answers) || answers.length !== Q.length) return false;
-    sharedMode = true;
-    verified = false;
     renderResult(answers);
     return true;
   } catch (e) { return false; }
