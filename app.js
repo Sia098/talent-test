@@ -200,12 +200,32 @@ function generateBlob() {
   if (typeof html2canvas !== 'function') return Promise.reject(new Error('no html2canvas'));
   const node = $('capture');
   const w = node.offsetWidth || window.innerWidth;
+  // 记录雷达 SVG 的实际渲染尺寸（html2canvas 1.4.1 不渲染内联 SVG，需转为图片）
+  const svgEl = node.querySelector('svg');
+  let svgW = 300, svgH = 300;
+  if (svgEl) { const r = svgEl.getBoundingClientRect(); svgW = Math.round(r.width) || 300; svgH = Math.round(r.height) || 300; }
   return html2canvas(node, {
     scale: Math.max(2, window.devicePixelRatio || 1),
     backgroundColor: '#f4f5fb',
     useCORS: true,
     logging: false,
-    windowWidth: w
+    windowWidth: w,
+    onclone: (cloned) => {
+      const s = cloned.querySelector('#capture svg');
+      if (s) {
+        try {
+          const xml = new XMLSerializer().serializeToString(s);
+          const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+          const img = cloned.createElement('img');
+          img.src = url;
+          img.style.width = svgW + 'px';
+          img.style.height = svgH + 'px';
+          img.style.display = 'block';
+          img.style.margin = '0 auto';
+          s.replaceWith(img);
+        } catch (e) { /* 忽略，退化为空白 */ }
+      }
+    }
   })
     .then(canvas => new Promise(resolve => {
       if (canvas.toBlob) canvas.toBlob(b => resolve(b), 'image/png');
