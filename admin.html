@@ -27,6 +27,8 @@
   .panel-sec{margin-top:16px}
   .sec-h{font-size:14px;font-weight:800;margin:0 0 10px}
   .link-home{display:block;text-align:center;margin-top:22px;font-size:12.5px;color:var(--main);text-decoration:none}
+  .linkurl{display:block;background:#f3f1ff;border:1.5px dashed var(--main);border-radius:12px;padding:11px;font-size:12.5px;color:var(--main);word-break:break-all;cursor:pointer;font-weight:600;line-height:1.6}
+  .linkurl:active{transform:scale(.99)}
 </style>
 </head>
 <body>
@@ -73,6 +75,29 @@
       </table>
     </div>
 
+    <div class="card panel-sec">
+      <div class="sec-h">🔗 生成访问链接</div>
+      <div class="add-row">
+        <input id="linkNote" placeholder="备注（如：小红书笔记A / 双11批次）" autocomplete="off">
+        <input id="linkDays" type="number" value="180" min="1" max="3650" style="max-width:74px" title="有效期(天)">
+        <button class="btn-primary" id="genLinkBtn">生成</button>
+      </div>
+      <div id="newLinkBox" style="display:none;margin-top:10px">
+        <div style="font-size:12px;color:var(--sub);margin-bottom:4px">复制此链接发给买家（点一下自动复制）：</div>
+        <div id="newLinkUrl" class="linkurl" title="点击复制"></div>
+      </div>
+    </div>
+
+    <div class="card panel-sec">
+      <div class="sec-h">📋 访问链接列表</div>
+      <table>
+        <thead>
+          <tr><th>备注</th><th>有效期至</th><th>状态</th><th>使用</th><th>操作</th></tr>
+        </thead>
+        <tbody id="linkRows"></tbody>
+      </table>
+    </div>
+
     <a class="link-home" href="index.html">← 返回测评首页</a>
   </div>
 </div>
@@ -106,6 +131,90 @@
   }
 
   function adminPw() { return $('adminPw').value.trim(); }
+
+  /* ===== 访问链接管理 ===== */
+  function fullLink(token) {
+    const base = location.origin + location.pathname.replace(/admin\.html(\?.*)?$/i, 'index.html');
+    return base + '?t=' + token;
+  }
+  function fmtDate(s) {
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return '-';
+    const p = n => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+  function linkStatus(r) {
+    if (r.revoked) return '<span style="color:#e5484d;font-weight:700">已作废</span>';
+    if (new Date(r.expires_at) < new Date()) return '<span style="color:#e58e26;font-weight:700">已过期</span>';
+    return '<span style="color:#2f8f6f;font-weight:700">有效</span>';
+  }
+  function renderLinks(rows) {
+    const tb = $('linkRows'); tb.innerHTML = '';
+    if (!rows || !rows.length) {
+      tb.innerHTML = '<tr><td colspan="5" style="color:#98a0b3;text-align:center;padding:14px">还没有生成任何链接</td></tr>';
+      return;
+    }
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      const short = (r.token || '').slice(0, 8);
+      tr.innerHTML =
+        '<td><b>' + escapeHtml(r.note || '(无备注)') + '</b><br><span style="color:#98a0b3;font-size:11px">' + short + '…</span></td>' +
+        '<td>' + fmtDate(r.expires_at) + '</td>' +
+        '<td>' + linkStatus(r) + '</td>' +
+        '<td>' + (r.used_count || 0) + '</td>' +
+        '<td>' +
+          '<button class="btn-reset" data-act="copy" data-tok="' + escapeHtml(r.token) + '">复制</button> ' +
+          (r.revoked
+            ? '<span style="color:#98a0b3;font-size:12px">已作废</span>'
+            : '<button class="btn-reset" data-act="revoke" data-tok="' + escapeHtml(r.token) + '">作废</button>') +
+        '</td>';
+      tb.appendChild(tr);
+    });
+    tb.querySelectorAll('.btn-reset').forEach(b => {
+      b.onclick = () => {
+        if (b.dataset.act === 'copy') copyText(fullLink(b.dataset.tok));
+        else revokeLink(b.dataset.tok);
+      };
+    });
+  }
+  function refreshLinks() {
+    return rpc('admin_list_links', { p_admin: adminPw() }).then(d => {
+      if (d && d.ok) renderLinks(d.rows);
+      else toast('会话失效，请重新进入');
+    });
+  }
+  function genLink() {
+    const note = $('linkNote').value.trim();
+    const days = parseInt($('linkDays').value, 10) || 180;
+    rpc('admin_create_link', { p_admin: adminPw(), p_note: note, p_days: days }).then(d => {
+      if (d && d.ok) {
+        $('newLinkUrl').textContent = fullLink(d.token);
+        $('newLinkBox').style.display = 'block';
+        toast('已生成 · 有效期至 ' + fmtDate(d.expires_at));
+        refreshLinks();
+      } else if (d && d.reason === 'bad_admin') { toast('管理员密码错误'); }
+      else { toast('生成失败'); }
+    }).catch(() => toast('网络异常'));
+  }
+  function revokeLink(token) {
+    if (!confirm('确定作废这条链接吗？作废后该链接立即失效（已测完的人不受影响）。')) return;
+    rpc('admin_revoke_link', { p_admin: adminPw(), p_token: token }).then(d => {
+      if (d && d.ok) { toast('已作废'); refreshLinks(); }
+      else toast('操作失败');
+    });
+  }
+  function copyText(txt) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(() => toast('已复制链接')).catch(() => fbCopy(txt));
+    } else fbCopy(txt);
+  }
+  function fbCopy(txt) {
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0'; ta.style.top = '-100px';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast('已复制'); } catch (e) { toast('复制失败，请手动复制'); }
+    ta.remove();
+  }
 
   function render(rows) {
     const tb = $('rows'); tb.innerHTML = '';
@@ -145,6 +254,7 @@
         $('loginCard').style.display = 'none';
         $('panel').style.display = 'block';
         render(d.rows);
+        refreshLinks();
       } else {
         $('loginHint').textContent = '管理员密码错误';
       }
@@ -160,6 +270,9 @@
 
   $('loginBtn').onclick = login;
   $('adminPw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+  $('genLinkBtn').onclick = genLink;
+  $('newLinkUrl').onclick = () => copyText($('newLinkUrl').textContent);
 
   $('resetAllBtn').onclick = () => {
     if (!confirm('确定把全部密码的「已用次数」清零吗？\n（不会影响密码本身，只是把剩余次数恢复为上限）')) return;
