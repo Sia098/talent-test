@@ -187,6 +187,7 @@ let modalImgURL = '';       // 兜底看图的 objectURL
 
 $('imgClose').addEventListener('click', () => { $('img-modal').classList.remove('show'); });
 $('imgDownload').addEventListener('click', () => { if (resultBlob) downloadBlob(resultBlob); });
+$('imgSave').addEventListener('click', saveImageToAlbum);
 
 function isMobileUA() {
   return navigator.maxTouchPoints > 0 || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
@@ -197,7 +198,15 @@ function isWeChat() {
 
 function generateBlob() {
   if (typeof html2canvas !== 'function') return Promise.reject(new Error('no html2canvas'));
-  return html2canvas($('capture'), { scale: 2, backgroundColor: '#f4f5fb', useCORS: true, logging: false })
+  const node = $('capture');
+  const w = node.offsetWidth || window.innerWidth;
+  return html2canvas(node, {
+    scale: Math.max(2, window.devicePixelRatio || 1),
+    backgroundColor: '#f4f5fb',
+    useCORS: true,
+    logging: false,
+    windowWidth: w
+  })
     .then(canvas => new Promise(resolve => {
       if (canvas.toBlob) canvas.toBlob(b => resolve(b), 'image/png');
       else resolve(null);
@@ -218,8 +227,8 @@ function downloadBlob(blob) {
   toast('已保存，请到相册/下载查看');
 }
 
-// 兜底：显示长图，用户长按保存（微信 / 旧版 iOS 等不支持分享下载的环境）
-function showImageFallback(blob) {
+// 展示长图：点"保存结果"后一定先呈现长图，保存方式在弹窗内选择
+function showResultImage(blob) {
   if (modalImgURL) URL.revokeObjectURL(modalImgURL);
   modalImgURL = URL.createObjectURL(blob);
   $('img-result').src = modalImgURL;
@@ -227,28 +236,26 @@ function showImageFallback(blob) {
 }
 
 function saveImage() {
-  const proceed = blob => {
-    if (!blob) { toast('生成失败，请重试'); return; }
+  const done = blob => {
+    if (!blob) { toast('生成长图失败，请重试'); return; }
     resultBlob = blob;
-    // 微信内置浏览器：无法分享/下载，直接看图长按
-    if (isWeChat()) { showImageFallback(blob); return; }
-    const file = new File([blob], '我的天赋测试结果.png', { type: 'image/png' });
-    // 移动端优先系统分享（iOS「存储图像」/ 安卓「保存到相册」）
-    if (isMobileUA() && navigator.canShare && navigator.canShare({ files: [file] })) {
-      navigator.share({ files: [file], title: '我的天赋测试结果' }).catch(err => {
-        if (err && err.name === 'AbortError') return;  // 用户取消
-        showImageFallback(blob);                       // 分享失败 → 看图长按
-      });
-    } else if (isMobileUA()) {
-      showImageFallback(blob);                         // 移动端不支持分享 → 看图长按
-    } else {
-      downloadBlob(blob);                              // 桌面端直接下载
-    }
+    showResultImage(blob);   // 先呈现长图，保证用户看到"长图样式"
   };
-  if (resultBlob) { proceed(resultBlob); return; }
+  if (resultBlob) { done(resultBlob); return; }
   if (!preparing) preparing = generateBlob().catch(() => null);
   toast('正在生成结果长图…');
-  preparing.then(proceed);
+  preparing.then(done);
+}
+
+// 弹窗内"保存到相册"：移动端走系统分享（可一键存图），否则回退下载
+function saveImageToAlbum() {
+  if (!resultBlob) return;
+  const file = new File([resultBlob], '我的天赋测试结果.png', { type: 'image/png' });
+  if (!isWeChat() && isMobileUA() && navigator.canShare && navigator.canShare({ files: [file] })) {
+    navigator.share({ files: [file], title: '我的天赋测试结果' }).catch(() => {});
+  } else {
+    downloadBlob(resultBlob);
+  }
 }
 
 function copyLink() {
@@ -267,8 +274,8 @@ function fallbackCopy(text) {
 }
 
 function retake() {
-  if (globalToken) clearLocalResult(globalToken);  // 清掉旧结果，重新测
-  ans.fill(null); idx = 0; renderQ(); show('screen-quiz');
+  if (globalToken) clearLocalResult(globalToken);  // 清掉本地结果缓存（结果 7 天有效期重置）
+  show('screen-home');                             // 先回到"开始测试"页，不直接进入第一题
 }
 
 /* ===================== 分享链接打开（免密查看） ===================== */
