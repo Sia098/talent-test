@@ -364,25 +364,34 @@ function showInvalid(msg) {
   show('screen-invalid');
 }
 
-// 校验访问链接（存在 / 未作废 / 未过期）
+// 校验访问链接：浏览器本地验签 + 同域作废名单（不依赖 supabase，国内可用）
 function verifyLink(token) {
-  fetch(window.SUPABASE_URL + '/rest/v1/rpc/verify_link', {
-    method: 'POST',
-    headers: supaHeaders(),
-    body: JSON.stringify({ p_token: token })
-  }).then(r => r.json()).then(d => {
-    if (d && d.ok) {
-      globalToken = token;
-      const saved = loadLocalResult(token);
-      if (saved) { renderResult(saved); return; }   // 7 天内有结果 → 直接展示，跳过答题
-      show('screen-home');
-    } else {
-      const msg = d && d.reason === 'expired' ? '该测试链接已过期，请联系卖家获取新链接'
-                 : d && d.reason === 'revoked' ? '该测试链接已被卖家作废，请联系卖家获取新链接'
-                 : '该测试链接无效，请联系卖家获取';
+  LinkToken.verifyToken(token, window.LINK_SECRET).then(res => {
+    if (!res.ok) {
+      const msg = res.reason === 'expired'
+        ? '该测试链接已过期，请联系卖家获取新链接'
+        : '该测试链接无效，请联系卖家获取';
       showInvalid(msg);
+      return;
     }
-  }).catch(() => showInvalid('网络异常，请刷新页面重试'));
+    // 查作废名单（同域 github.io，国内可访问；加载失败则放行，不误伤正常用户）
+    fetch('revoked.json?v=' + Date.now(), { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : []))
+      .then(list => {
+        const revoked = Array.isArray(list) && list.indexOf(res.id) >= 0;
+        if (revoked) { showInvalid('该测试链接已被卖家作废，请联系卖家获取新链接'); return; }
+        enterWithToken(token);
+      })
+      .catch(() => enterWithToken(token));   // 名单不可达 → 放行
+  }).catch(() => showInvalid('链接校验失败，请刷新页面重试'));
+}
+
+// 校验通过且未作废 → 进入（有 7 天内结果则直接展示）
+function enterWithToken(token) {
+  globalToken = token;
+  const saved = loadLocalResult(token);
+  if (saved) { renderResult(saved); return; }   // 7 天内有结果 → 直接展示，跳过答题
+  show('screen-home');
 }
 
 /* ---- 本地结果缓存（按 token 关联，7 天有效）---- */
